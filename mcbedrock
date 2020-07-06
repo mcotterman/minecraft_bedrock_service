@@ -1,0 +1,206 @@
+#!/bin/sh
+# Start/stop the Minecraft bedrock server
+#
+### BEGIN INIT INFO
+# Provides:          mcbedrock
+# Required-Start:    $local_fs $remote_fs screen-cleanup
+# Required-Stop:     $local_fs $remote_fs
+# Should-Start:      $network
+# Should-Stop:       $network
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Minecraft Bedrock Server Script
+# Description:       Provides service functionality for the Minecraft Bedrock server 
+#                    on Ubuntu Linux.
+#                    (C) 2020 under MIT Licenses - Provided AS IS!
+#                    https://github.com/mcotterman/minecraft_bedrock_service
+### END INIT INFO
+
+### Important note: The update command will overwrite all files except server.properties, whitelist.json and permissions.json
+
+# Change these to match your configuration
+# Name of your Minecraft world (should match level-name in server.properties)
+WORLD='MehstronautsLab'
+# Path to your installation of minecraft-bedrock server
+MCPATH='/usr/games/minecraft-bedrock'
+# Space delimited list of files to skip during updates
+UPDATESKIPS='server.properties whitelist.json permissions.json'
+# Username of the user who own the Bedrock server and who you want to run the server under
+USERNAME='minecraft'
+
+# You most likley do not want to change any of this
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+DESC='minecraft bedrock daemon'
+SERVICE='bedrock_server'
+SCREENNAME='mcbedrock_server'
+NAME='mcbedrock_server'
+BACKUPPATH="$MCPATH/minecraft.backup"
+HISTORY='1024'
+INVOCATION="$MCPATH/bedrock_server"
+
+test -f $DAEMON || exit 0
+
+# . /lib/lsb/init-functions
+
+ME=`whoami`
+as_user() {
+  if [ "$ME" = "$USERNAME" ] ; then
+    bash -c "$1"
+  else
+    su - "$USERNAME" -c "$1"
+  fi
+}
+
+mc_start() {
+  if  pgrep -u $USERNAME -f $SERVICE > /dev/null ; then
+    echo "$SERVICE is already running!"
+  else
+    echo "Starting $SERVICE..."
+    cd $MCPATH
+    as_user "cd $MCPATH && screen -h $HISTORY -dmS ${SCREENNAME} $INVOCATION"
+    sleep 7
+    if pgrep -u $USERNAME -f $SERVICE > /dev/null ; then
+      echo "$SERVICE is now running."
+    else
+      echo "Error! Could not start $SERVICE!"
+    fi
+  fi
+}
+ 
+mc_saveoff() {
+  if pgrep -u $USERNAME -f $SERVICE > /dev/null ; then
+    echo "$SERVICE is running... suspending saves"
+    as_user "screen -p 0 -S ${SCREENNAME} -X eval 'stuff \"say SERVER BACKUP STARTING. Server going readonly...\"\015'"
+    as_user "screen -p 0 -S ${SCREENNAME} -X eval 'stuff \"save hold\"\015'"
+    sync
+    sleep 20
+    as_user "screen -p 0 -S ${SCREENNAME} -X eval 'stuff \"save query\"\015'"
+    sleep 10
+  else
+    echo "$SERVICE is not running. Not suspending saves."
+  fi
+}
+ 
+mc_saveon() {
+  if pgrep -u $USERNAME -f $SERVICE > /dev/null ; then
+    echo "$SERVICE is running... re-enabling saves"
+    as_user "screen -p 0 -S ${SCREENNAME} -X eval 'stuff \"save resume\"\015'"
+    as_user "screen -p 0 -S ${SCREENNAME} -X eval 'stuff \"say SERVER BACKUP ENDED. Server going read-write...\"\015'"
+  else
+    echo "$SERVICE is not running. Not resuming saves."
+  fi
+}
+ 
+mc_stop() {
+  if pgrep -u $USERNAME -f $SERVICE > /dev/null ; then
+    echo "Stopping $SERVICE"
+    as_user "screen -p 0 -S ${SCREENNAME} -X eval 'stuff \"say SERVER SHUTTING DOWN IN 10 SECONDS. Saving map...\"\015'"
+    sleep 10
+    as_user "screen -p 0 -S ${SCREENNAME} -X eval 'stuff \"stop\"\015'"
+    sleep 7
+  else
+    echo "$SERVICE was not running."
+  fi
+  if pgrep -u $USERNAME -f $SERVICE > /dev/null ; then
+    echo "Error! $SERVICE could not be stopped."
+  else
+    echo "$SERVICE is stopped."
+  fi
+}
+
+mc_update() {
+  if pgrep -u $USERNAME -f $SERVICE > /dev/null ; then
+    echo "$SERVICE is running! Will not start update."
+  else
+    MC_NEW_VERSION="$MCPATH/new_version"
+    as_user "wget -q -O - https://www.minecraft.net/en-us/download/server/bedrock/ | egrep -o \"https://minecraft.azureedge.net/bin-linux/bedrock-server-[a-z0-9\.]*zip\" | head -n1 > $MC_NEW_VERSION"
+    MC_VERSION="$MCPATH/version"
+    MC_VERSION_URL=`cat $MC_VERSION`
+    MC_NEW_VERSION_URL=`cat $MC_NEW_VERSION`
+    MC_NEW_FILENAME=`cat $MC_NEW_VERSION | egrep -o "bedrock-server-[a-z0-9\.]*zip" | head -n1`
+    if [ "$MC_NEW_VERSION_URL" = "" ] ; then
+      echo "Something went wrong! Unable to detect new $SERVICE version!"
+    else	
+      if [ "$MC_VERSION_URL" = "$MC_NEW_VERSION_URL" ] ; then
+ 	      echo "You are already running the newest version of $SERVICE"
+      else
+        echo "You need a new version of the $SERVICE server! Downloading now..."
+        as_user "cd $MCPATH && wget -q -N -O $MCPATH/mc_server.zip --no-check-certificate $MC_NEW_VERSION_URL"
+        as_user "unzip -o $MCPATH/mc_server.zip -d $MCPATH -x $UPDATESKIPS"
+	      as_user "mv $MC_NEW_VERSION $MC_VERSION"
+      fi
+    fi
+  fi
+}
+ 
+mc_backup() {
+  mc_saveoff
+  NOW=`date "+%Y-%m-%d_%Hh%M"`
+  BACKUP_FILE="$BACKUPPATH/${WORLD}_${NOW}.tar"
+  echo "Starting backup to $BACKUP_FILE..."
+  echo "  Backing up minecraft world..."
+  if [ ! -d "$BACKUPPATH" ] ; then
+    echo "  $BACKUPPATH does not exist! Creating directory."
+    as_user "mkdir $BACKUPPATH"
+  fi
+  as_user "tar -C \"$MCPATH/worlds\" -cf \"$BACKUP_FILE\" $WORLD"
+  echo "  Backing up minecraft config..."
+  as_user "tar -C \"$MCPATH\" -rf \"$BACKUP_FILE\" *.json"
+  as_user "tar -C \"$MCPATH\" -rf \"$BACKUP_FILE\" server.properties"
+
+  mc_saveon
+
+  echo "Compressing backup..."
+  as_user "gzip -f \"$BACKUP_FILE\""
+  echo "Done."
+}
+ 
+mc_command() {
+  command="$1";
+  if pgrep -u $USERNAME -f $SERVICE > /dev/null ; then
+    echo "$SERVICE is running... executing command"
+    as_user "screen -p 0 -S ${SCREENNAME} -X eval 'stuff \"$command\"\015'"
+    # Server logs do not exist, so must close blinly
+    echo "In theory your command was sent to the server"
+  fi
+}
+
+case "$1" in
+start)	mc_start
+	  ;;
+stop)	  mc_stop
+    ;;
+restart) 
+    mc_stop
+    mc_start
+    ;;
+update)
+    mc_stop
+    mc_backup
+    mc_update $2
+    mc_start
+    ;;
+backup)
+    mc_backup
+    ;;
+command)
+    if [ $# -gt 1 ] ; then
+      shift
+      mc_command "$*"
+    else
+      echo "Must specify server command (try 'help'?)"
+    fi
+    ;;
+status)  
+    if pgrep -u $USERNAME -f $SERVICE > /dev/null ; then
+      echo "$SERVICE is running."
+    else
+      echo "$SERVICE is not running."
+    fi
+    ;;
+*)
+    echo "Usage: $0 {start|stop|update|backup|status|restart|command \"server command\"}"
+    exit 1
+    ;;
+esac
+exit 0
