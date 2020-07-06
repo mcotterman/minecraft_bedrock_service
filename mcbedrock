@@ -20,7 +20,7 @@
 
 # Change these to match your configuration
 # Name of your Minecraft world (should match level-name in server.properties)
-WORLD='MehstronautsLab'
+WORLD='Bedrock level'
 # Path to your installation of minecraft-bedrock server
 MCPATH='/usr/games/minecraft-bedrock'
 # Space delimited list of files to skip during updates
