@@ -14,6 +14,8 @@
 #                    on Ubuntu Linux.
 #                    (C) 2020 under MIT Licenses - Provided AS IS!
 #                    https://github.com/mcotterman/minecraft_bedrock_service
+#                    Modified from and heavily based on a script from:
+#                    https://minecraft.gamepedia.com/Tutorials/Server_startup_script
 ### END INIT INFO
 
 ### Important note: The update command will overwrite all files except server.properties, whitelist.json and permissions.json
@@ -125,8 +127,8 @@ mc_update() {
  	      echo "You are already running the newest version of $SERVICE"
       else
         echo "You need a new version of the $SERVICE server! Downloading now..."
-        as_user "cd $MCPATH && wget -q -N -O $MCPATH/mc_server.zip --no-check-certificate $MC_NEW_VERSION_URL"
-        as_user "unzip -o $MCPATH/mc_server.zip -d $MCPATH -x $UPDATESKIPS"
+        as_user "cd \"$MCPATH\" && wget -q -N -O \"$MCPATH/mc_server.zip\" --no-check-certificate $MC_NEW_VERSION_URL"
+        as_user "unzip -o \"$MCPATH/mc_server.zip\" -d \"$MCPATH\" -x $UPDATESKIPS"
 	      as_user "mv $MC_NEW_VERSION $MC_VERSION"
       fi
     fi
@@ -136,22 +138,22 @@ mc_update() {
 mc_backup() {
   mc_saveoff
   NOW=`date "+%Y-%m-%d_%Hh%M"`
-  BACKUP_FILE="$BACKUPPATH/${WORLD}_${NOW}.tar"
+  BACKUP_FILE="\"$BACKUPPATH/${WORLD}_${NOW}.tar\""
   echo "Starting backup to $BACKUP_FILE..."
   echo "  Backing up minecraft world..."
   if [ ! -d "$BACKUPPATH" ] ; then
     echo "  $BACKUPPATH does not exist! Creating directory."
-    as_user "mkdir $BACKUPPATH"
+    as_user "mkdir \"$BACKUPPATH\""
   fi
-  as_user "tar -C \"$MCPATH/worlds\" -cf \"$BACKUP_FILE\" $WORLD"
+  as_user "tar -C \"$MCPATH/worlds\" -cf $BACKUP_FILE \"$WORLD\""
   echo "  Backing up minecraft config..."
-  as_user "tar -C \"$MCPATH\" -rf \"$BACKUP_FILE\" *.json"
-  as_user "tar -C \"$MCPATH\" -rf \"$BACKUP_FILE\" server.properties"
+  as_user "tar -C \"$MCPATH\" -rf $BACKUP_FILE whitelist.json permissions.json"
+  as_user "tar -C \"$MCPATH\" -rf $BACKUP_FILE server.properties"
 
   mc_saveon
 
   echo "Compressing backup..."
-  as_user "gzip -f \"$BACKUP_FILE\""
+  as_user "gzip -f $BACKUP_FILE"
   echo "Done."
 }
  
