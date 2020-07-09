@@ -29,6 +29,11 @@ You should have a server built with the following requirements.
   * unzip - `sudo apt install unzip`
 
 ## Tested Configurations
+### AWS Lightsail
+* Ubuntu Linux 18.04 AMI
+* Bedrock server 1.16.
+* [AWS Lightsail 1vCPU + 1GB RAM](https://aws.amazon.com/lightsail/) - $5/mo at the time of this posting
+
 ### Ubuntu VM running on ESXi
 * Ubuntu Linux 18.04
 * Bedrrock Server 1.16
@@ -84,6 +89,6 @@ You should have a server built with the following requirements.
 1. Enable the script
     * `sudo /lib/systemd/systemd-sysv-install enable mcbedrock` 
 1. Set startup and shutdown defaults
-    * `sudoupdate-rc.d minecraft defaults`
+    * `sudo update-rc.d mcbedrock defaults`
 1. Try it out!
     * `sudo service mcbedrock start`
